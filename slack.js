@@ -25,14 +25,19 @@ io.on("connection", (socket) => {
 // all namespaces listen for new connection
 namespaces.forEach((ns) => {
   io.of(ns.endpoint).on("connection", (nsSocket) => {
-    console.log(`${nsSocket.id} has join ${ns.endpoint}.`);
+    // console.log(`${nsSocket.id} has join ${ns.endpoint}.`);
+    const username = nsSocket.handshake.query.username;
+
     nsSocket.emit("nsRoomLoad", ns.rooms);
 
     nsSocket.on("joinRoom", (roomToJoin, updateNumOfMemCallback) => {
+      const roomToLeave = Object.keys(nsSocket.rooms)[1];
+      nsSocket.leave(roomToLeave);
+      updateUsersInRoom(ns, roomToLeave);
       nsSocket.join(roomToJoin);
       io.of(ns.endpoint)
         .in(roomToJoin)
-        .clients((err, clients) => {
+        .clients((_, clients) => {
           updateNumOfMemCallback(clients.length);
         });
 
@@ -41,15 +46,7 @@ namespaces.forEach((ns) => {
       });
 
       nsSocket.emit("historyToRender", nsRoom.history);
-
-      // send the new number of members to all sockets in the room
-      io.of(ns.endpoint)
-        .in(roomToJoin)
-        .clients((_, clients) => {
-          io.of(ns.endpoint)
-            .in(roomToJoin)
-            .emit("updateNumOfMems", clients.length);
-        });
+      updateUsersInRoom(ns, roomToJoin);
     });
 
     nsSocket.on("newMessageToOtherClient", (msg) => {
@@ -61,7 +58,7 @@ namespaces.forEach((ns) => {
       const fullMsg = {
         text: msg.text,
         time: Date.now(),
-        username: "$placeholder",
+        username: username,
         avatar: "https://via.placeholder.com/30",
       };
 
@@ -77,3 +74,12 @@ namespaces.forEach((ns) => {
     });
   });
 });
+
+function updateUsersInRoom(ns, roomToJoin) {
+  // send the new number of members to all sockets in the room
+  io.of(ns.endpoint)
+    .in(roomToJoin)
+    .clients((_, clients) => {
+      io.of(ns.endpoint).in(roomToJoin).emit("updateNumOfMems", clients.length);
+    });
+}
